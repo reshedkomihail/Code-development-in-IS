@@ -81,7 +81,6 @@ class Database:
                 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
             ''')
             
-            # Таблица отделов
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS departments (
                     id INT PRIMARY KEY AUTO_INCREMENT,
@@ -91,7 +90,6 @@ class Database:
                 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
             ''')
             
-            # Таблица отпусков
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS vacations (
                     id INT PRIMARY KEY AUTO_INCREMENT,
@@ -147,42 +145,34 @@ class Database:
                 query += " AND status = %s"
                 params.append(filters['status'])
             
-            # Фильтр по отделу
             if filters.get('department'):
                 query += " AND department = %s"
                 params.append(filters['department'])
             
-            # Фильтр по должности
             if filters.get('position'):
                 query += " AND position LIKE %s"
                 params.append(f"%{filters['position']}%")
             
-            # Фильтр по дате приема (от)
             if filters.get('hire_date_from'):
                 query += " AND hire_date >= %s"
                 params.append(filters['hire_date_from'])
             
-            # Фильтр по дате приема (до)
             if filters.get('hire_date_to'):
                 query += " AND hire_date <= %s"
                 params.append(filters['hire_date_to'])
             
-            # Фильтр по зарплате (от)
             if filters.get('salary_from') is not None:
                 query += " AND salary >= %s"
                 params.append(filters['salary_from'])
             
-            # Фильтр по зарплате (до)
             if filters.get('salary_to') is not None:
                 query += " AND salary <= %s"
                 params.append(filters['salary_to'])
             
-            # Фильтр по возрасту (от)
             if filters.get('age_from') is not None:
                 query += " AND TIMESTAMPDIFF(YEAR, birth_date, CURDATE()) >= %s"
                 params.append(filters['age_from'])
             
-            # Фильтр по возрасту (до)
             if filters.get('age_to') is not None:
                 query += " AND TIMESTAMPDIFF(YEAR, birth_date, CURDATE()) <= %s"
                 params.append(filters['age_to'])
@@ -316,7 +306,6 @@ class Database:
                          'Должность', 'Отдел', 'Телефон', 'Email', 'Дата приема', 
                          'Зарплата', 'Статус'])
         
-    
         status_map = {
             'active': 'Активен',
             'on_vacation': 'В отпуске',
