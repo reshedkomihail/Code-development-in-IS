@@ -61,7 +61,6 @@ class Database:
         cursor = self.connection.cursor()
         
         try:
-            # Таблица сотрудников
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS employees (
                     id INT PRIMARY KEY AUTO_INCREMENT,
