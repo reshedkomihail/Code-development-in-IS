@@ -37,36 +37,36 @@ COLOR_MAP = {
 
 STYLESHEET = """
 QMainWindow, QDialog {
-    background-color: #1e1e1e;
+    background-color: #f0f0f0;
 }
 QLabel {
-    color: #ffffff;
+    color: #000000;
 }
 QLineEdit, QComboBox, QDateEdit, QSpinBox, QDoubleSpinBox {
     padding: 8px;
-    border: 1px solid #555;
+    border: 1px solid #cccccc;
     border-radius: 4px;
-    background-color: #2d2d2d;
-    color: #ffffff;
+    background-color: #ffffff;
+    color: #000000;
 }
 QPushButton {
     padding: 8px 15px;
     border-radius: 4px;
     font-weight: bold;
-    background-color: #2d2d2d;
-    color: #ffffff;
+    background-color: #e0e0e0;
+    color: #000000;
 }
 QPushButton:hover {
-    background-color: #3d3d3d;
+    background-color: #d0d0d0;
 }
 QTableWidget {
-    background-color: #1e1e1e;
-    color: #ffffff;
-    gridline-color: #333333;
+    background-color: #ffffff;
+    color: #000000;
+    gridline-color: #dddddd;
 }
 QHeaderView::section {
-    background-color: #2d2d2d;
-    color: #ffffff;
+    background-color: #e0e0e0;
+    color: #000000;
     border-bottom: 2px solid #0078D7;
 }
 """
@@ -302,7 +302,7 @@ class LoginDialog(QDialog):
         self.authenticated_user = None
         self.setWindowTitle("Авторизация")
         self.setFixedSize(400, 250)
-        self.setStyleSheet(STYLESHEET)
+        self.setStyleSheet(STYLESHEET),
         self.init_ui()
 
     def init_ui(self):
@@ -1041,7 +1041,7 @@ class HRApp(QMainWindow):
 
 def main():
     application = QApplication(sys.argv)
-    application.setStyle('Fusion')
+    application.setStyle('Windows')
 
     database = Database()
 
