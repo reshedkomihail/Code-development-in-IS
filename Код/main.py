@@ -3,11 +3,10 @@ import os
 import re
 import csv
 import hashlib
+import sqlite3
 from datetime import date, datetime
 from io import StringIO
 
-import mysql.connector
-from mysql.connector import Error
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTableWidget, QTableWidgetItem, QPushButton, QLabel, QLineEdit,
@@ -78,49 +77,52 @@ class Database:
         self.connect()
 
     def connect(self):
-        self.connection = mysql.connector.connect(
-            host=os.getenv('MYSQL_HOST', '127.0.0.1'),
-            user=os.getenv('MYSQL_USER', 'root'),
-            password=os.getenv('MYSQL_PASSWORD', '12345')
-        )
-        self.execute(f"CREATE DATABASE IF NOT EXISTS hr", commit=True)
-        self.execute("USE hr", commit=True)
-
+        # Создаем директорию для БД если её нет
+        db_dir = os.path.dirname(os.path.abspath(__file__))
+        db_path = os.path.join(db_dir, 'hr_database.db')
+        
+        self.connection = sqlite3.connect(db_path)
+        self.connection.row_factory = sqlite3.Row  # Для доступа по имени колонки
+        
+        # Включаем поддержку внешних ключей
+        self.execute("PRAGMA foreign_keys = ON", commit=True)
+        
+        # Создаем таблицы
         tables = [
             """
             CREATE TABLE IF NOT EXISTS users (
-                id INT PRIMARY KEY AUTO_INCREMENT,
-                username VARCHAR(50) UNIQUE,
-                password_hash VARCHAR(255),
-                role ENUM('admin','manager','viewer') DEFAULT 'viewer',
-                full_name VARCHAR(100),
-                is_active BOOLEAN DEFAULT TRUE,
-                last_login TIMESTAMP NULL
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE,
+                password_hash TEXT,
+                role TEXT CHECK(role IN ('admin','manager','viewer')) DEFAULT 'viewer',
+                full_name TEXT,
+                is_active INTEGER DEFAULT 1,
+                last_login TIMESTAMP
             )
             """,
             """
             CREATE TABLE IF NOT EXISTS employees (
-                id INT PRIMARY KEY AUTO_INCREMENT,
-                last_name VARCHAR(100) NOT NULL,
-                first_name VARCHAR(100) NOT NULL,
-                patronymic VARCHAR(100),
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                last_name TEXT NOT NULL,
+                first_name TEXT NOT NULL,
+                patronymic TEXT,
                 birth_date DATE,
-                position VARCHAR(100),
-                department VARCHAR(100),
-                phone VARCHAR(20),
-                email VARCHAR(100),
+                position TEXT,
+                department TEXT,
+                phone TEXT,
+                email TEXT,
                 hire_date DATE,
                 salary DECIMAL(10,2),
-                status ENUM('active','on_vacation','sick_leave','fired') DEFAULT 'active'
+                status TEXT CHECK(status IN ('active','on_vacation','sick_leave','fired')) DEFAULT 'active'
             )
             """,
             """
             CREATE TABLE IF NOT EXISTS vacations (
-                id INT PRIMARY KEY AUTO_INCREMENT,
-                employee_id INT NOT NULL,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                employee_id INTEGER NOT NULL,
                 start_date DATE NOT NULL,
                 end_date DATE NOT NULL,
-                type VARCHAR(50),
+                type TEXT,
                 FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
             )
             """
@@ -133,14 +135,21 @@ class Database:
 
     def execute(self, sql, params=None, commit=False):
         cursor = self.connection.cursor()
-        cursor.execute(sql, params or ())
-
+        
+        if params is None:
+            cursor.execute(sql)
+        else:
+            cursor.execute(sql, params)
+        
         if commit:
             self.connection.commit()
             result = cursor.lastrowid
         else:
             result = cursor.fetchall()
-
+            # Преобразуем Row объекты в списки для совместимости
+            if result and isinstance(result[0], sqlite3.Row):
+                result = [list(row) for row in result]
+        
         cursor.close()
         return result
 
@@ -148,7 +157,7 @@ class Database:
         if not self.execute("SELECT id FROM users WHERE username='admin'"):
             password_hash = hashlib.sha256('admin123'.encode()).hexdigest()
             self.execute(
-                "INSERT INTO users (username, password_hash, role, full_name) VALUES (%s, %s, 'admin', 'Администратор')",
+                "INSERT INTO users (username, password_hash, role, full_name) VALUES (?, ?, 'admin', 'Администратор')",
                 ('admin', password_hash),
                 commit=True
             )
@@ -156,13 +165,13 @@ class Database:
     def authenticate(self, username, password):
         password_hash = hashlib.sha256(password.encode()).hexdigest()
         user = self.execute(
-            "SELECT * FROM users WHERE username=%s AND password_hash=%s AND is_active=1",
+            "SELECT * FROM users WHERE username=? AND password_hash=? AND is_active=1",
             (username, password_hash)
         )
 
         if user:
             self.execute(
-                "UPDATE users SET last_login=NOW() WHERE id=%s",
+                "UPDATE users SET last_login=CURRENT_TIMESTAMP WHERE id=?",
                 (user[0][0],),
                 commit=True
             )
@@ -180,32 +189,34 @@ class Database:
             INSERT INTO employees (
                 last_name, first_name, patronymic, birth_date,
                 position, department, phone, email, hire_date, salary, status
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         return self.execute(sql, data, commit=True)
 
     def get_employees(self, search=None):
-        sql = "SELECT * FROM employees ORDER BY last_name"
         if search:
-            sql = f"SELECT * FROM employees WHERE last_name LIKE '%{search}%' ORDER BY last_name"
-        return self.execute(sql)
+            sql = "SELECT * FROM employees WHERE last_name LIKE ? ORDER BY last_name"
+            return self.execute(sql, (f'%{search}%',))
+        else:
+            sql = "SELECT * FROM employees ORDER BY last_name"
+            return self.execute(sql)
 
     def get_employee(self, employee_id):
-        result = self.execute("SELECT * FROM employees WHERE id=%s", (employee_id,))
+        result = self.execute("SELECT * FROM employees WHERE id=?", (employee_id,))
         return result[0] if result else None
 
     def update_employee(self, employee_id, data):
         sql = """
             UPDATE employees SET
-                last_name=%s, first_name=%s, patronymic=%s, birth_date=%s,
-                position=%s, department=%s, phone=%s, email=%s, hire_date=%s,
-                salary=%s, status=%s
-            WHERE id=%s
+                last_name=?, first_name=?, patronymic=?, birth_date=?,
+                position=?, department=?, phone=?, email=?, hire_date=?,
+                salary=?, status=?
+            WHERE id=?
         """
         self.execute(sql, (*data, employee_id), commit=True)
 
     def delete_employee(self, employee_id):
-        self.execute("DELETE FROM employees WHERE id=%s", (employee_id,), commit=True)
+        self.execute("DELETE FROM employees WHERE id=?", (employee_id,), commit=True)
 
     def get_departments(self):
         result = self.execute(
@@ -216,13 +227,13 @@ class Database:
     def add_vacation(self, employee_id, start_date, end_date, vacation_type):
         sql = """
             INSERT INTO vacations (employee_id, start_date, end_date, type)
-            VALUES (%s, %s, %s, %s)
+            VALUES (?, ?, ?, ?)
         """
         self.execute(sql, (employee_id, start_date, end_date, vacation_type), commit=True)
 
     def get_vacations(self, employee_id):
         return self.execute(
-            "SELECT * FROM vacations WHERE employee_id=%s ORDER BY start_date DESC",
+            "SELECT * FROM vacations WHERE employee_id=? ORDER BY start_date DESC",
             (employee_id,)
         )
 
@@ -266,10 +277,12 @@ def validate_name(name, field_name):
     return True, ""
 
 
-def validate_birth_date(birth_date):
+def validate_birth_date(date_edit):
+    """Валидация даты рождения"""
+    qdate = date_edit.date()
+    birth_date = qdate.toPython()
     today = date.today()
-    birth = birth_date.toPython()
-    age = today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
+    age = today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))
 
     if age < 16:
         return False, "Возраст должен быть не менее 16 лет"
@@ -302,7 +315,7 @@ class LoginDialog(QDialog):
         self.authenticated_user = None
         self.setWindowTitle("Авторизация")
         self.setFixedSize(400, 250)
-        self.setStyleSheet(STYLESHEET),
+        self.setStyleSheet(STYLESHEET)
         self.init_ui()
 
     def init_ui(self):
@@ -851,7 +864,7 @@ class HRApp(QMainWindow):
             self.employee_table.setItem(row, 3, QTableWidgetItem(employee[3] or ""))
 
             if employee[4]:
-                birth_date = employee[4]
+                birth_date = datetime.strptime(str(employee[4]), "%Y-%m-%d").date()
                 age = today.year - birth_date.year - (
                     (today.month, today.day) < (birth_date.month, birth_date.day)
                 )
@@ -970,7 +983,7 @@ class HRApp(QMainWindow):
         age = ""
         if employee[4]:
             today = date.today()
-            birth = employee[4]
+            birth = datetime.strptime(str(employee[4]), "%Y-%m-%d").date()
             age = today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
 
         info_data = [
