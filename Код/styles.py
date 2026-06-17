@@ -1,3 +1,4 @@
+# styles.py
 from PySide6.QtGui import QColor
 
 STATUS_MAP = {
