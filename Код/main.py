@@ -1,4 +1,3 @@
-# main.py
 import sys
 import re
 from datetime import date, datetime
@@ -17,11 +16,34 @@ from styles import STATUS_MAP, STATUS_REV, COLOR_MAP, STYLESHEET
 from database import Database
 
 
+def format_date(date_str):
+    """Форматирует дату из YYYY-MM-DD в ДД.ММ.ГГГГ"""
+    if not date_str:
+        return "—"
+    try:
+        date_obj = datetime.strptime(str(date_str), "%Y-%m-%d")
+        return date_obj.strftime("%d.%m.%Y")
+    except:
+        return str(date_str)
+
+
 def validate_name(name, field_name):
     if len(name.strip()) < 2:
         return False, f"{field_name} должен содержать минимум 2 символа"
     if not re.match(r'^[а-яёА-ЯЁa-zA-Z\-\'\s]+$', name):
         return False, f"{field_name} может содержать только буквы"
+    return True, ""
+
+
+def validate_patronymic(patronymic):
+    if not patronymic:
+        return True, ""
+    
+    patronymic = patronymic.strip()
+    if len(patronymic) < 2:
+        return False, "Отчество должно содержать минимум 2 символа"
+    if not re.match(r'^[а-яёА-ЯЁa-zA-Z\-\'\s]+$', patronymic):
+        return False, "Отчество может содержать только буквы"
     return True, ""
 
 
@@ -53,6 +75,46 @@ def validate_salary(salary_text):
         return False, "Зарплата не может быть больше 10 000 000 рублей"
 
     return True, ""
+
+
+def validate_phone(phone_text):
+    if not phone_text:
+        return True, ""
+    
+    phone_text = str(phone_text).strip()
+    if not phone_text:
+        return True, ""
+    
+    clean_phone = re.sub(r'[\s\-\(\)]', '', phone_text)
+    
+    patterns = [
+        r'^\+7\d{10}$',
+        r'^8\d{10}$',
+        r'^7\d{10}$',
+        r'^\d{10}$'
+    ]
+    
+    for pattern in patterns:
+        if re.match(pattern, clean_phone):
+            return True, ""
+    
+    return False, "Неверный формат телефона. Используйте +7XXXXXXXXXX или 8XXXXXXXXXX"
+
+
+def validate_email(email_text):
+    if not email_text:
+        return True, ""
+    
+    email_text = str(email_text).strip()
+    if not email_text:
+        return True, ""
+    
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    
+    if re.match(pattern, email_text):
+        return True, ""
+    
+    return False, "Неверный формат email. Пример: user@example.com"
 
 
 class LoginDialog(QDialog):
@@ -172,6 +234,7 @@ class EmployeeDialog(QDialog):
 
         self.patronymic_edit = QLineEdit()
         self.patronymic_edit.setPlaceholderText("Иванович")
+        self.patronymic_edit.setToolTip("Необязательное поле. Только буквы, минимум 2 символа")
         form_layout.addRow("Отчество:", self.patronymic_edit)
 
         self.birth_date_edit = QDateEdit()
@@ -189,10 +252,12 @@ class EmployeeDialog(QDialog):
 
         self.phone_edit = QLineEdit()
         self.phone_edit.setPlaceholderText("+7 (999) 123-45-67")
+        self.phone_edit.setToolTip("Формат: +7XXXXXXXXXX или 8XXXXXXXXXX")
         form_layout.addRow("Телефон:", self.phone_edit)
 
         self.email_edit = QLineEdit()
         self.email_edit.setPlaceholderText("ivanov@example.com")
+        self.email_edit.setToolTip("Формат: user@example.com")
         form_layout.addRow("Email:", self.email_edit)
 
         self.hire_date_edit = QDateEdit()
@@ -294,6 +359,12 @@ class EmployeeDialog(QDialog):
             self.error_label.setVisible(True)
             return
 
+        is_valid, message = validate_patronymic(patronymic)
+        if not is_valid:
+            self.error_label.setText(message)
+            self.error_label.setVisible(True)
+            return
+
         is_valid, message = validate_birth_date(self.birth_date_edit)
         if not is_valid:
             self.error_label.setText(message)
@@ -301,6 +372,18 @@ class EmployeeDialog(QDialog):
             return
 
         is_valid, message = validate_salary(salary_text)
+        if not is_valid:
+            self.error_label.setText(message)
+            self.error_label.setVisible(True)
+            return
+
+        is_valid, message = validate_phone(phone)
+        if not is_valid:
+            self.error_label.setText(message)
+            self.error_label.setVisible(True)
+            return
+
+        is_valid, message = validate_email(email)
         if not is_valid:
             self.error_label.setText(message)
             self.error_label.setVisible(True)
@@ -344,7 +427,7 @@ class VacationDialog(QDialog):
             self.setWindowTitle("Добавление отпуска")
             
         self.setModal(True)
-        self.setFixedSize(450, 300)
+        self.setFixedSize(500, 350)
         self.setStyleSheet(STYLESHEET)
         self.init_ui()
         
@@ -353,37 +436,45 @@ class VacationDialog(QDialog):
 
     def init_ui(self):
         layout = QVBoxLayout()
-        layout.setSpacing(15)
+        layout.setSpacing(20)
+        layout.setContentsMargins(20, 20, 20, 20)
         
         form_layout = QFormLayout()
-        form_layout.setSpacing(12)
+        form_layout.setSpacing(15)
         form_layout.setLabelAlignment(Qt.AlignRight)
 
         self.start_date_edit = QDateEdit()
         self.start_date_edit.setCalendarPopup(True)
         self.start_date_edit.setDate(QDate.currentDate())
+        self.start_date_edit.setMinimumSize(150, 35)
         form_layout.addRow("Дата начала:", self.start_date_edit)
 
         self.end_date_edit = QDateEdit()
         self.end_date_edit.setCalendarPopup(True)
         self.end_date_edit.setDate(QDate.currentDate().addDays(14))
+        self.end_date_edit.setMinimumSize(150, 35)
         form_layout.addRow("Дата окончания:", self.end_date_edit)
 
         self.vacation_type_combo = QComboBox()
         self.vacation_type_combo.addItems(["Ежегодный", "Дополнительный", "Без содержания", "Учебный"])
+        self.vacation_type_combo.setMinimumSize(200, 35)
         form_layout.addRow("Тип отпуска:", self.vacation_type_combo)
 
         layout.addLayout(form_layout)
 
         button_layout = QHBoxLayout()
-        button_layout.setSpacing(10)
+        button_layout.setSpacing(15)
 
         save_button = QPushButton("Сохранить")
         save_button.setObjectName("primaryButton")
+        save_button.setMinimumHeight(40)
+        save_button.setMinimumWidth(120)
         save_button.clicked.connect(self.save_vacation)
         button_layout.addWidget(save_button)
 
         cancel_button = QPushButton("Отмена")
+        cancel_button.setMinimumHeight(40)
+        cancel_button.setMinimumWidth(120)
         cancel_button.clicked.connect(self.reject)
         button_layout.addWidget(cancel_button)
 
@@ -484,16 +575,6 @@ class FilterWidget(QWidget):
         row1_layout.addWidget(self.department_filter)
         filter_layout.addLayout(row1_layout)
 
-        row2_layout = QHBoxLayout()
-        row2_layout.setSpacing(15)
-        row2_layout.addWidget(QLabel("Поиск:"))
-        self.search_filter = QLineEdit()
-        self.search_filter.setObjectName("searchField")
-        self.search_filter.setPlaceholderText("Фамилия, имя, должность...")
-        self.search_filter.textChanged.connect(self.apply_filters)
-        row2_layout.addWidget(self.search_filter)
-        filter_layout.addLayout(row2_layout)
-
         buttons_layout = QHBoxLayout()
         buttons_layout.setSpacing(10)
         
@@ -538,10 +619,6 @@ class FilterWidget(QWidget):
         if department:
             filters['department'] = department
 
-        search = self.search_filter.text().strip()
-        if search:
-            filters['search'] = search
-
         return filters
 
     def apply_filters(self):
@@ -551,7 +628,6 @@ class FilterWidget(QWidget):
     def clear_filters(self):
         self.status_filter.setCurrentIndex(0)
         self.department_filter.setCurrentIndex(0)
-        self.search_filter.clear()
         self.apply_filters()
 
 
@@ -562,6 +638,8 @@ class HRApp(QMainWindow):
         self.user = user
         self.filter_visible = False
         self.filter_widget = None
+        self.all_employees = []
+        self.current_view_dialog = None
         self.setWindowTitle(f"Система кадрового учета - {user['full_name']}")
         self.setGeometry(100, 100, 1400, 800)
         self.setStyleSheet(STYLESHEET)
@@ -574,6 +652,9 @@ class HRApp(QMainWindow):
         main_layout = QVBoxLayout(central_widget)
         main_layout.setSpacing(15)
 
+        top_layout = QHBoxLayout()
+        top_layout.setSpacing(10)
+
         button_layout = QHBoxLayout()
         button_layout.setSpacing(10)
 
@@ -583,21 +664,19 @@ class HRApp(QMainWindow):
         button_layout.addWidget(self.add_button)
 
         self.edit_button = QPushButton("Редактировать")
+        self.edit_button.setObjectName("primaryButton")
         self.edit_button.clicked.connect(self.edit_employee)
         button_layout.addWidget(self.edit_button)
+        
+        self.vacation_button = QPushButton("Отпуск")
+        self.vacation_button.setObjectName("primaryButton")
+        self.vacation_button.clicked.connect(self.add_vacation)
+        button_layout.addWidget(self.vacation_button)
 
         self.delete_button = QPushButton("Удалить")
         self.delete_button.setObjectName("dangerButton")
         self.delete_button.clicked.connect(self.delete_employee)
         button_layout.addWidget(self.delete_button)
-
-        self.vacation_button = QPushButton("Отпуск")
-        self.vacation_button.clicked.connect(self.add_vacation)
-        button_layout.addWidget(self.vacation_button)
-
-        self.refresh_button = QPushButton("Обновить")
-        self.refresh_button.clicked.connect(self.load_employees)
-        button_layout.addWidget(self.refresh_button)
 
         self.stats_button = QPushButton("Статистика")
         self.stats_button.clicked.connect(self.show_statistics)
@@ -607,9 +686,59 @@ class HRApp(QMainWindow):
         self.filter_toggle_btn.setCheckable(True)
         self.filter_toggle_btn.clicked.connect(self.toggle_filters)
         button_layout.addWidget(self.filter_toggle_btn)
+        
+        self.refresh_button = QPushButton("Обновить")
+        self.refresh_button.setObjectName("")
+        self.refresh_button.clicked.connect(self.refresh_data)
+        button_layout.addWidget(self.refresh_button)
 
-        button_layout.addStretch()
-        main_layout.addLayout(button_layout)
+        top_layout.addLayout(button_layout)
+        top_layout.addStretch()
+
+        search_layout = QHBoxLayout()
+        search_layout.setSpacing(5)
+        
+        search_label = QLabel("Поиск:")
+        search_label.setStyleSheet("font-weight: bold; color: #4a90d9;")
+        search_layout.addWidget(search_label)
+        
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Поиск по всем полям...")
+        self.search_input.setFixedWidth(300)
+        self.search_input.setStyleSheet("""
+            QLineEdit {
+                padding: 8px 12px;
+                border: 2px solid #4a90d9;
+                border-radius: 20px;
+                background-color: #ffffff;
+                font-size: 13px;
+            }
+            QLineEdit:focus {
+                border-color: #2a6ab8;
+                background-color: #f8fbff;
+            }
+        """)
+        self.search_input.textChanged.connect(self.on_search_changed)
+        search_layout.addWidget(self.search_input)
+        
+        clear_search_btn = QPushButton("")
+        clear_search_btn.setFixedSize(30, 30)
+        clear_search_btn.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: none;
+                font-size: 16px;
+                color: #888;
+            }
+            QPushButton:hover {
+                color: #e74c3c;
+            }
+        """)
+        clear_search_btn.clicked.connect(self.clear_search)
+        search_layout.addWidget(clear_search_btn)
+        
+        top_layout.addLayout(search_layout)
+        main_layout.addLayout(top_layout)
 
         self.filter_widget = FilterWidget(self)
         main_layout.addWidget(self.filter_widget)
@@ -625,6 +754,8 @@ class HRApp(QMainWindow):
         self.employee_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.employee_table.doubleClicked.connect(self.view_details)
         self.employee_table.setAlternatingRowColors(True)
+        self.employee_table.setSortingEnabled(True)
+        
         main_layout.addWidget(self.employee_table)
 
         self.status_label = QLabel("Готов к работе")
@@ -637,6 +768,66 @@ class HRApp(QMainWindow):
 
         self.filter_widget.load_departments()
         self.update_statistics()
+
+    def on_search_changed(self, text):
+        search_text = text.strip().lower()
+        if not search_text:
+            self.update_table(self.all_employees)
+            return
+        
+        filtered = []
+        for employee in self.all_employees:
+            search_string = " ".join([
+                str(employee[0]),
+                str(employee[1] or ""),
+                str(employee[2] or ""),
+                str(employee[3] or ""),
+                str(employee[4] or ""),
+                str(employee[5] or ""),
+                str(employee[6] or ""),
+                str(employee[7] or ""),
+                str(employee[8] or ""),
+                str(employee[9] or ""),
+                str(employee[10] or ""),
+                STATUS_MAP.get(employee[11], employee[11])
+            ]).lower()
+            
+            if search_text in search_string:
+                filtered.append(employee)
+        
+        self.update_table(filtered)
+
+    def clear_search(self):
+        self.search_input.clear()
+        self.load_employees()
+
+    def refresh_data(self):
+        employees = self.database.get_employees()
+        today = date.today()
+        
+        for employee in employees:
+            if employee[11] == 'on_vacation':
+                vacations = self.database.get_vacations(employee[0])
+                has_active_vacation = False
+                
+                for vacation in vacations:
+                    start = datetime.strptime(str(vacation[2]), "%Y-%m-%d").date()
+                    end = datetime.strptime(str(vacation[3]), "%Y-%m-%d").date()
+                    
+                    if start <= today <= end:
+                        has_active_vacation = True
+                        break
+                
+                if not has_active_vacation:
+                    employee_data = (
+                        employee[1], employee[2], employee[3], employee[4],
+                        employee[5], employee[6], employee[7], employee[8],
+                        employee[9], employee[10], 'active'
+                    )
+                    self.database.update_employee(employee[0], employee_data)
+        
+        self.load_employees()
+        QMessageBox.information(self, "Обновление", "Данные успешно обновлены")
 
     def toggle_filters(self):
         self.filter_visible = self.filter_widget.toggle_visibility()
@@ -659,16 +850,30 @@ class HRApp(QMainWindow):
 
     def load_employees(self):
         filters = self.filter_widget.get_filters() if self.filter_visible else {}
-        search = filters.get('search')
+        
+        search_text = self.search_input.text().strip()
+        if search_text:
+            filters['search'] = search_text
+            
         status_filter = filters.get('status')
         department_filter = filters.get('department')
+        search = filters.get('search')
+        
         employees = self.database.get_employees(search, status_filter, department_filter)
+        self.all_employees = employees
         self.update_table(employees)
 
     def update_table(self, employees):
-        self.employee_table.setRowCount(len(employees))
+        self.employee_table.setSortingEnabled(False)
+        self.employee_table.setRowCount(0)
+        
+        if not employees:
+            self.employee_table.setSortingEnabled(True)
+            self.update_statistics()
+            return
 
         today = date.today()
+        self.employee_table.setRowCount(len(employees))
 
         for row, employee in enumerate(employees):
             self.employee_table.setItem(row, 0, QTableWidgetItem(str(employee[0])))
@@ -689,10 +894,8 @@ class HRApp(QMainWindow):
             self.employee_table.setItem(row, 6, QTableWidgetItem(employee[6] or ""))
             self.employee_table.setItem(row, 7, QTableWidgetItem(employee[7] or ""))
             self.employee_table.setItem(row, 8, QTableWidgetItem(employee[8] or ""))
-            self.employee_table.setItem(row, 9, QTableWidgetItem(str(employee[9]) if employee[9] else ""))
-
-            status_text = STATUS_MAP.get(employee[11], employee[11])
-            status_item = QTableWidgetItem(status_text)
+            self.employee_table.setItem(row, 9, QTableWidgetItem(format_date(employee[9])))
+            self.employee_table.setItem(row, 10, QTableWidgetItem(STATUS_MAP.get(employee[11], employee[11])))
 
             colors = COLOR_MAP.get(employee[11], (200, 220, 240, 0, 0, 0))
             background_color = QColor(colors[0], colors[1], colors[2])
@@ -704,11 +907,8 @@ class HRApp(QMainWindow):
                     item.setBackground(QBrush(background_color))
                     item.setForeground(QBrush(text_color))
 
-            status_item.setForeground(text_color)
-            status_item.setBackground(QBrush(background_color))
-            self.employee_table.setItem(row, 10, status_item)
-
         self.employee_table.resizeColumnsToContents()
+        self.employee_table.setSortingEnabled(True)
         self.update_statistics()
 
     def update_statistics(self):
@@ -773,29 +973,36 @@ class HRApp(QMainWindow):
         dialog = VacationDialog(self, employee_id)
         if dialog.exec():
             self.load_employees()
+            if self.current_view_dialog and self.current_view_dialog.isVisible():
+                self.refresh_view_dialog(self.current_view_dialog)
 
     def view_details(self, index):
         row = index.row()
         employee_id = int(self.employee_table.item(row, 0).text())
+        self.show_employee_details(employee_id)
+
+    def show_employee_details(self, employee_id):
         employee = self.database.get_employee(employee_id)
 
         if not employee:
             return
 
+        if self.current_view_dialog:
+            self.current_view_dialog.close()
+
         dialog = QDialog(self)
+        self.current_view_dialog = dialog
         dialog.setWindowTitle(f"Информация - {employee[1]} {employee[2]}")
-        dialog.setMinimumWidth(900)
-        dialog.setMinimumHeight(500)
+        dialog.setMinimumWidth(1100)
+        dialog.setMinimumHeight(550)
         dialog.setStyleSheet(STYLESHEET)
 
         layout = QVBoxLayout()
         tabs = QTabWidget()
 
-        # Вкладка "Основная информация" с кнопками редактирования и удаления
         basic_tab = QWidget()
         basic_layout = QVBoxLayout(basic_tab)
         
-        # Кнопки действий
         button_layout_top = QHBoxLayout()
         
         edit_profile_btn = QPushButton("Редактировать профиль")
@@ -815,7 +1022,6 @@ class HRApp(QMainWindow):
         button_layout_top.addStretch()
         basic_layout.addLayout(button_layout_top)
         
-        # Информация
         info_layout = QFormLayout()
         info_layout.setSpacing(12)
         info_layout.setLabelAlignment(Qt.AlignRight)
@@ -830,13 +1036,13 @@ class HRApp(QMainWindow):
             ("Фамилия:", employee[1]),
             ("Имя:", employee[2]),
             ("Отчество:", employee[3] or "—"),
-            ("Дата рождения:", str(employee[4]) if employee[4] else "—"),
+            ("Дата рождения:", format_date(employee[4])),
             ("Возраст:", f"{age} лет" if age else "—"),
             ("Должность:", employee[5] or "—"),
             ("Отдел:", employee[6] or "—"),
             ("Телефон:", employee[7] or "—"),
             ("Email:", employee[8] or "—"),
-            ("Дата приема:", str(employee[9]) if employee[9] else "—"),
+            ("Дата приема:", format_date(employee[9])),
             ("Зарплата:", f"{employee[10]:,.2f} руб." if employee[10] else "—"),
             ("Статус:", STATUS_MAP.get(employee[11], employee[11]))
         ]
@@ -852,7 +1058,6 @@ class HRApp(QMainWindow):
         basic_layout.addStretch()
         tabs.addTab(basic_tab, "Основная информация")
 
-        # Вкладка "Отпуска"
         vacation_tab = QWidget()
         vacation_layout = QVBoxLayout(vacation_tab)
 
@@ -860,7 +1065,8 @@ class HRApp(QMainWindow):
         
         add_vacation_btn = QPushButton("Добавить отпуск")
         add_vacation_btn.setObjectName("primaryButton")
-        add_vacation_btn.setFixedHeight(35)
+        add_vacation_btn.setFixedHeight(40)
+        add_vacation_btn.setFixedWidth(150)
         add_vacation_btn.clicked.connect(lambda: self.add_vacation_for_employee(employee_id))
         vacation_button_layout.addWidget(add_vacation_btn)
         
@@ -870,41 +1076,44 @@ class HRApp(QMainWindow):
         vacation_table = QTableWidget()
         vacation_table.setColumnCount(4)
         vacation_table.setHorizontalHeaderLabels(["Начало", "Окончание", "Тип", "Действия"])
-        vacation_table.horizontalHeader().setStretchLastSection(True)
         
-        vacation_table.verticalHeader().setDefaultSectionSize(45)
+        vacation_table.setColumnWidth(0, 130)
+        vacation_table.setColumnWidth(1, 130)
+        vacation_table.setColumnWidth(2, 150)
+        vacation_table.horizontalHeader().setStretchLastSection(True)
+        vacation_table.verticalHeader().setDefaultSectionSize(50)
 
         vacations = self.database.get_vacations(employee_id)
         vacation_table.setRowCount(len(vacations))
 
-        table_font = QFont("Arial", 10)
+        table_font = QFont("Arial", 11)
         vacation_table.setFont(table_font)
 
         for vacation_row, vacation in enumerate(vacations):
-            vacation_table.setItem(vacation_row, 0, QTableWidgetItem(str(vacation[2])))
-            vacation_table.setItem(vacation_row, 1, QTableWidgetItem(str(vacation[3])))
+            vacation_table.setItem(vacation_row, 0, QTableWidgetItem(format_date(vacation[2])))
+            vacation_table.setItem(vacation_row, 1, QTableWidgetItem(format_date(vacation[3])))
             vacation_table.setItem(vacation_row, 2, QTableWidgetItem(vacation[4] or "—"))
             
             actions_widget = QWidget()
             actions_layout = QHBoxLayout(actions_widget)
             actions_layout.setContentsMargins(5, 5, 5, 5)
-            actions_layout.setSpacing(15)
+            actions_layout.setSpacing(10)
             
             edit_btn = QPushButton("Редактировать")
             edit_btn.setObjectName("primaryButton")
-            edit_btn.setFixedWidth(140)
-            edit_btn.setFixedHeight(32)
+            edit_btn.setFixedWidth(120)
+            edit_btn.setFixedHeight(35)
             edit_btn.setFont(QFont("Arial", 10))
             edit_btn.clicked.connect(lambda checked, v_id=vacation[0]: 
                                     self.edit_vacation(employee_id, v_id))
             
             delete_btn = QPushButton("Удалить")
             delete_btn.setObjectName("dangerButton")
-            delete_btn.setFixedWidth(120)
-            delete_btn.setFixedHeight(32)
+            delete_btn.setFixedWidth(100)
+            delete_btn.setFixedHeight(35)
             delete_btn.setFont(QFont("Arial", 10))
             delete_btn.clicked.connect(lambda checked, v_id=vacation[0]: 
-                                      self.delete_vacation(v_id))
+                                      self.delete_vacation(v_id, employee_id))
             
             actions_layout.addWidget(edit_btn)
             actions_layout.addWidget(delete_btn)
@@ -920,16 +1129,33 @@ class HRApp(QMainWindow):
         close_button = QPushButton("Закрыть")
         close_button.clicked.connect(dialog.accept)
         close_button.setObjectName("primaryButton")
-        close_button.setFixedHeight(35)
+        close_button.setFixedHeight(40)
         layout.addWidget(close_button)
 
         dialog.setLayout(layout)
+        dialog.finished.connect(lambda: self.on_view_dialog_closed())
         dialog.exec()
+
+    def on_view_dialog_closed(self):
+        self.current_view_dialog = None
+
+    def refresh_view_dialog(self, dialog):
+        title = dialog.windowTitle()
+        if "Информация - " in title:
+            name = title.replace("Информация - ", "")
+            employees = self.database.get_employees()
+            for emp in employees:
+                if f"{emp[1]} {emp[2]}" == name:
+                    dialog.close()
+                    self.show_employee_details(emp[0])
+                    break
 
     def edit_employee_profile(self, employee_id):
         dialog = EmployeeDialog(self, employee_id)
         if dialog.exec():
             self.load_employees()
+            if self.current_view_dialog:
+                self.refresh_view_dialog(self.current_view_dialog)
 
     def delete_employee_from_profile(self, employee_id, parent_dialog):
         reply = QMessageBox.question(
@@ -942,26 +1168,55 @@ class HRApp(QMainWindow):
             parent_dialog.accept()
             self.load_employees()
             self.filter_widget.load_departments()
+            self.current_view_dialog = None
             QMessageBox.information(self, "Успех", "Сотрудник успешно удален")
 
     def add_vacation_for_employee(self, employee_id):
         dialog = VacationDialog(self, employee_id)
         if dialog.exec():
             self.load_employees()
+            if self.current_view_dialog:
+                self.refresh_view_dialog(self.current_view_dialog)
 
     def edit_vacation(self, employee_id, vacation_id):
         dialog = VacationDialog(self, employee_id, vacation_id)
         if dialog.exec():
             self.load_employees()
+            if self.current_view_dialog:
+                self.refresh_view_dialog(self.current_view_dialog)
 
-    def delete_vacation(self, vacation_id):
+    def delete_vacation(self, vacation_id, employee_id):
         reply = QMessageBox.question(
             self, "Удаление отпуска", "Удалить запись об отпуске?",
             QMessageBox.Yes | QMessageBox.No
         )
         if reply == QMessageBox.Yes:
             self.database.delete_vacation(vacation_id)
+            
+            vacations = self.database.get_vacations(employee_id)
+            today = date.today()
+            has_active_vacation = False
+            
+            for vacation in vacations:
+                start = datetime.strptime(str(vacation[2]), "%Y-%m-%d").date()
+                end = datetime.strptime(str(vacation[3]), "%Y-%m-%d").date()
+                if start <= today <= end:
+                    has_active_vacation = True
+                    break
+            
+            if not has_active_vacation:
+                employee = self.database.get_employee(employee_id)
+                if employee and employee[11] == 'on_vacation':
+                    employee_data = (
+                        employee[1], employee[2], employee[3], employee[4],
+                        employee[5], employee[6], employee[7], employee[8],
+                        employee[9], employee[10], 'active'
+                    )
+                    self.database.update_employee(employee_id, employee_data)
+            
             self.load_employees()
+            if self.current_view_dialog:
+                self.refresh_view_dialog(self.current_view_dialog)
             QMessageBox.information(self, "Успех", "Запись об отпуске удалена")
 
     def show_statistics(self):
