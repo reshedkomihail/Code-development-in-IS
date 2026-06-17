@@ -1,3 +1,4 @@
+# main.py
 import sys
 import re
 from datetime import date, datetime
@@ -14,6 +15,14 @@ from PySide6.QtGui import QColor, QRegularExpressionValidator, QAction, QBrush, 
 
 from styles import STATUS_MAP, STATUS_REV, COLOR_MAP, STYLESHEET
 from database import Database
+
+# Импортируем openpyxl для работы с Excel
+try:
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    OPENPYXL_AVAILABLE = True
+except ImportError:
+    OPENPYXL_AVAILABLE = False
 
 
 def format_date(date_str):
@@ -659,7 +668,7 @@ class HRApp(QMainWindow):
         button_layout.setSpacing(10)
 
         self.add_button = QPushButton("Добавить")
-        self.add_button.setObjectName("primaryButton")
+        self.add_button.setObjectName("greenButton")
         self.add_button.clicked.connect(self.add_employee)
         button_layout.addWidget(self.add_button)
 
@@ -667,7 +676,7 @@ class HRApp(QMainWindow):
         self.edit_button.setObjectName("primaryButton")
         self.edit_button.clicked.connect(self.edit_employee)
         button_layout.addWidget(self.edit_button)
-        
+
         self.vacation_button = QPushButton("Отпуск")
         self.vacation_button.setObjectName("primaryButton")
         self.vacation_button.clicked.connect(self.add_vacation)
@@ -678,17 +687,21 @@ class HRApp(QMainWindow):
         self.delete_button.clicked.connect(self.delete_employee)
         button_layout.addWidget(self.delete_button)
 
-        self.stats_button = QPushButton("Статистика")
-        self.stats_button.clicked.connect(self.show_statistics)
-        button_layout.addWidget(self.stats_button)
-
         self.filter_toggle_btn = QPushButton("Фильтры")
         self.filter_toggle_btn.setCheckable(True)
         self.filter_toggle_btn.clicked.connect(self.toggle_filters)
         button_layout.addWidget(self.filter_toggle_btn)
-        
+
+        self.export_excel_btn = QPushButton(" Экспорт в Excel")
+        self.export_excel_btn.clicked.connect(self.export_to_excel)
+        button_layout.addWidget(self.export_excel_btn)
+
+        self.stats_button = QPushButton("Статистика")
+        self.stats_button.clicked.connect(self.show_statistics)
+        button_layout.addWidget(self.stats_button)
+
         self.refresh_button = QPushButton("Обновить")
-        self.refresh_button.setObjectName("")
+        self.refresh_button.setObjectName("primaryButton")
         self.refresh_button.clicked.connect(self.refresh_data)
         button_layout.addWidget(self.refresh_button)
 
@@ -721,7 +734,7 @@ class HRApp(QMainWindow):
         self.search_input.textChanged.connect(self.on_search_changed)
         search_layout.addWidget(self.search_input)
         
-        clear_search_btn = QPushButton("")
+        clear_search_btn = QPushButton("✕")
         clear_search_btn.setFixedSize(30, 30)
         clear_search_btn.setStyleSheet("""
             QPushButton {
@@ -930,6 +943,109 @@ class HRApp(QMainWindow):
         if current_row >= 0:
             return int(self.employee_table.item(current_row, 0).text())
         return None
+
+    def export_to_excel(self):
+        if not OPENPYXL_AVAILABLE:
+            QMessageBox.warning(
+                self, 
+                "Библиотека не установлена", 
+                "Для экспорта в Excel необходимо установить библиотеку openpyxl:\n\npip install openpyxl"
+            )
+            return
+
+        employees = self.all_employees if self.all_employees else self.database.get_employees()
+        
+        if not employees:
+            QMessageBox.warning(self, "Нет данных", "Нет данных для экспорта")
+            return
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Сохранить файл Excel",
+            "employees.xlsx",
+            "Excel files (*.xlsx);;All files (*.*)"
+        )
+
+        if not file_path:
+            return
+
+        try:
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Сотрудники"
+
+            headers = [
+                "ID", "Фамилия", "Имя", "Отчество", "Дата рождения",
+                "Возраст", "Должность", "Отдел", "Телефон", "Email",
+                "Дата приема", "Зарплата", "Статус"
+            ]
+
+            header_font = Font(bold=True, color="FFFFFF", size=12)
+            header_fill = PatternFill(start_color="4A90D9", end_color="4A90D9", fill_type="solid")
+            header_alignment = Alignment(horizontal="center", vertical="center")
+            border_style = Border(
+                left=Side(style='thin'),
+                right=Side(style='thin'),
+                top=Side(style='thin'),
+                bottom=Side(style='thin')
+            )
+
+            for col, header in enumerate(headers, 1):
+                cell = ws.cell(row=1, column=col, value=header)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = header_alignment
+                cell.border = border_style
+
+            today = date.today()
+            for row, employee in enumerate(employees, 2):
+
+                age = ""
+                if employee[4]:
+                    birth_date = datetime.strptime(str(employee[4]), "%Y-%m-%d").date()
+                    age = today.year - birth_date.year - (
+                        (today.month, today.day) < (birth_date.month, birth_date.day)
+                    )
+
+                data_row = [
+                    employee[0],  
+                    employee[1],  
+                    employee[2],  
+                    employee[3] or "",  
+                    format_date(employee[4]),  
+                    age,  
+                    employee[5] or "",  
+                    employee[6] or "",  
+                    employee[7] or "",  
+                    employee[8] or "",  
+                    format_date(employee[9]),  
+                    employee[10] or 0, 
+                    STATUS_MAP.get(employee[11], employee[11])  
+                ]
+
+                for col, value in enumerate(data_row, 1):
+                    cell = ws.cell(row=row, column=col, value=value)
+                    cell.alignment = Alignment(horizontal="left", vertical="center")
+                    cell.border = border_style
+
+            for col in range(1, len(headers) + 1):
+                column = ws.column_dimensions[chr(64 + col)]
+                column.width = 18
+
+            wb.save(file_path)
+            
+            QMessageBox.information(
+                self, 
+                "Успех", 
+                f"Данные успешно экспортированы в файл:\n{file_path}"
+            )
+
+        except Exception as e:
+            QMessageBox.critical(
+                self, 
+                "Ошибка экспорта", 
+                f"Произошла ошибка при экспорте:\n{str(e)}"
+            )
 
     def add_employee(self):
         dialog = EmployeeDialog(self)
