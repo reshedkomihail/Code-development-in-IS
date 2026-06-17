@@ -1,4 +1,3 @@
-# styles.py
 from PySide6.QtGui import QColor
 
 STATUS_MAP = {
@@ -86,6 +85,20 @@ QPushButton#dangerButton {
 
 QPushButton#dangerButton:hover {
     background-color: #c0392b;
+}
+
+QPushButton#greenButton {
+    background-color: #28a745;
+    color: white;
+    border: none;
+}
+
+QPushButton#greenButton:hover {
+    background-color: #218838;
+}
+
+QPushButton#greenButton:pressed {
+    background-color: #1e7e34;
 }
 
 QTableWidget {
